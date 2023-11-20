@@ -94,6 +94,7 @@ executable physics3-model1
   -- Other library packages from which modules are imported.
   build-depends:
     , base             ^>=4.17.2.0
+    , gloss            ^>=1.13.2.2
     , physics3-model1
 
   -- Directories containing source files.
