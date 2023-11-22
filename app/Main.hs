@@ -8,14 +8,12 @@ import Control.Monad (forM_)
 import GHC.Float (double2Float, float2Double, int2Double)
 import Graphics.Gloss
 import Graphics.Gloss.Interface.Environment
-import MyLib
+import SimOptimized qualified as SO
 import System.Environment (getArgs)
 import System.Exit
 import Text.Read (readMaybe)
 
 type WithScreenSize = (?sz :: (Double, Double))
-
-type State = (Integer, [Model])
 
 makeBox :: Float -> Picture
 makeBox a = Polygon [(0, 0), (a, 0), (a, a), (0, a)]
@@ -26,15 +24,15 @@ screenSize = ?sz
 withScreenSize :: (Double, Double) -> ((WithScreenSize) => a) -> a
 withScreenSize sz act = let ?sz = sz in act
 
-drawModel :: (WithScreenSize) => Integer -> Model -> Picture
-drawModel ctr model =
+drawWorld :: (WithScreenSize) => SO.World -> Picture
+drawWorld w =
   Translate (-0.9 * width / 2) (-height / 4) $
     Pictures
-      [ Translate (double2Float model.x * 0.9 * width) 0 smallBox,
-        Translate (double2Float model.bigX * 0.9 * width) 0 bigBox,
+      [ Translate (double2Float w.currentState.smallObject.position * 0.9 * width) 0 smallBox,
+        Translate (double2Float w.currentState.bigObject.position * 0.9 * width) 0 bigBox,
         wall,
         Line [(0, 0), (width, 0)],
-        Translate (0.1 * width) (0.75 * height / 2) $ Text (show ctr)
+        Translate (0.1 * width) (0.75 * height / 2) $ Text (show w.hitsCount)
       ]
   where
     smallBoxSize = 50
@@ -45,55 +43,65 @@ drawModel ctr model =
     bigBoxColor = makeColor 0.8588 0.396 0.367 1
     bigBox = Translate smallBoxSize 0 $ Color bigBoxColor $ makeBox bigBoxSize
     wall = Line [(0, 0), (0, width / 2)]
-    (width, height) = let (w, h) = screenSize in (double2Float w, double2Float h)
+    (width, height) = let (w', h') = screenSize in (double2Float w', double2Float h')
 
-calcInsideDeltaTime :: Double -> Model -> Model
-calcInsideDeltaTime dt model = model {x = x', bigX = bigX'}
-  where
-    x' = model.x + dt * model.config.v
-    bigX' = model.bigX + dt * model.config.u
+updateWorld' :: SO.Config -> Float -> SO.World -> SO.World
+updateWorld' cfg dt = SO.step cfg (float2Double dt)
 
-updateModel :: Double -> State -> State
-updateModel _ (_, []) = error "error"
-updateModel dt (a, [x]) = (a, [calcInsideDeltaTime dt $ x {deltaTime = dt}])
-updateModel dt (ctr, x : y : xs)
-  | y.deltaTime >= dt = (ctr, calcInsideDeltaTime dt x : y {deltaTime = y.deltaTime - dt} : xs)
-  | otherwise = updateModel (dt - y.deltaTime) (ctr + 1, y : xs)
-
-updateModel' :: Float -> State -> State
-updateModel' a = updateModel (float2Double a)
-
-getInitialModel :: IO Model
-getInitialModel = do
-  getArgs >>= \case
-    [velocity, e] -> do
-      case (,) <$> readMaybe @Double velocity <*> readMaybe @Int e of
-        Just (v', e') | 0.01 <= v' && v' <= 1 && 0 <= e' && e' <= 10 -> pure $ initializeModel (-v') e'
-        _ -> do
-          putStrLn "error: incorrect params\n\t<velocity> should be in range [0.01; 1]\n\t<exp> should be a positive number and no more than 10"
-          exitWith (ExitFailure 1)
-    ["model"] -> do
-      printHitsCount
-      exitSuccess
+parseConfig :: String -> String -> IO SO.Config
+parseConfig velocity e = do
+  case (,) <$> readMaybe @Double velocity <*> readMaybe @Int e of
+    Just (v', e')
+      | 0.001 <= v' && v' <= 1 && 0 <= e' && e' <= 13 ->
+          pure $
+            SO.Config
+              { SO.smallMass = 1,
+                SO.bigMass = 10 ^ e',
+                SO.smallPosition = 0.5,
+                SO.bigPosition = 1,
+                SO.bigVelocity = -v'
+              }
     _ -> do
-      putStrLn "usage: ./program model | ./program <velocity> <exp>"
+      putStrLn "error: incorrect params\n\t<velocity> should be in range [0.01; 1]\n\t<exp> should be a positive number and no more than 13"
       exitWith (ExitFailure 1)
-  where
-    initializeModel u bigMExp = Model {x = 0.5, bigX = 1, deltaTime = 0, config = Config {m = 1, bigM = 10 ^ bigMExp, v = 0, u = u}}
 
 printHitsCount :: IO ()
 printHitsCount = forM_ (take 15 getHitsCount) $ \(m, cnt) -> do
   putStrLn $ "M = " <> show m <> "; count = " <> show cnt
+  where
+    bases :: [Double]
+    bases = map (10.0 ^) [(0 :: Int) ..]
+
+    getHitsCount :: [(Double, Integer)]
+    getHitsCount = map (\m -> (m, go m)) bases
+      where
+        go m =
+          let cfg =
+                SO.Config
+                  { SO.smallMass = 1,
+                    SO.bigMass = m,
+                    SO.smallPosition = 0.5,
+                    SO.bigPosition = 1,
+                    SO.bigVelocity = -1
+                  }
+              w = SO.initialWorld cfg
+           in SO.countHits cfg w.nextHitState
 
 main :: IO ()
 main = do
-  initialModel <- getInitialModel
-  (xWidth, yWidth) <- getScreenSize
-  let env = withScreenSize (int2Double xWidth, int2Double yWidth)
-  simulate
-    FullScreen
-    white
-    60
-    (0, generateModel initialModel)
-    (env (\(ctr, xs) -> drawModel ctr (head xs)))
-    (const updateModel')
+  getArgs >>= \case
+    ["hits"] -> do
+      printHitsCount
+    [velocity, e] -> do
+      cfg <- parseConfig velocity e
+      let world0 = SO.initialWorld cfg
+      (xWidth, yWidth) <- getScreenSize
+      let env = withScreenSize (int2Double xWidth, int2Double yWidth)
+      simulate
+        FullScreen
+        white
+        60
+        world0
+        (env drawWorld)
+        (const (updateWorld' cfg))
+    _ -> putStrLn "usage: ./program hits | ./program <velocity> <exp>"

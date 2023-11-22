@@ -59,7 +59,7 @@ library
   import:           warnings
 
   -- Modules exported by the library.
-  exposed-modules:  MyLib
+  exposed-modules:  SimOptimized
 
   -- Modules included in this library but not exported.
   -- other-modules:
@@ -70,7 +70,6 @@ library
   -- Other library packages from which modules are imported.
   build-depends:
     , base   ^>=4.17.2.0
-    , gloss  ^>=1.13.2.2
 
   -- Directories containing source files.
   hs-source-dirs:   src
