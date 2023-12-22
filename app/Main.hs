@@ -5,6 +5,8 @@
 module Main where
 
 import Control.Monad (forM_)
+import Data.ByteString.Builder qualified as Builder
+import Data.ByteString.Lazy qualified as BSL
 import GHC.Float (double2Float, float2Double, int2Double)
 import Graphics.Gloss
 import Graphics.Gloss.Interface.Environment
@@ -87,11 +89,36 @@ printHitsCount = forM_ (take 15 getHitsCount) $ \(m, cnt) -> do
               w = SO.initialWorld cfg
            in SO.countHits cfg w.nextHitState
 
+getStats :: SO.Config -> Maybe SO.WorldState -> BSL.ByteString
+getStats cfg = Builder.toLazyByteString . renderTable . go
+  where
+    renderTable rows = mconcat [r <> Builder.charUtf8 '\n' | r <- rows]
+
+    go Nothing = []
+    go (Just state) = case (SO.getNextState cfg state) of
+      Just nextState -> (renderRow $ getRow state nextState) : (go (Just nextState))
+      Nothing -> []
+
+    renderRow [] = mempty
+    renderRow (c : cs) = Builder.doubleDec c <> mconcat [Builder.charUtf8 ',' <> Builder.doubleDec c' | c' <- cs]
+
+    getRow state nextState = [state.smallObject.velocity, state.smallObject.position, state.bigObject.velocity, state.bigObject.position, dt]
+      where
+        dt
+          | state.smallObject.velocity /= 0 = abs ((state.smallObject.position - nextState.smallObject.position) / state.smallObject.velocity)
+          | otherwise = abs ((state.bigObject.position - nextState.bigObject.position) / state.bigObject.velocity)
+
 main :: IO ()
 main = do
   getArgs >>= \case
     ["hits"] -> do
       printHitsCount
+    ["stats", fp, velocity, e] -> do
+      cfg <- parseConfig velocity e
+      let world0 = SO.initialWorld cfg
+      let stats = getStats cfg (Just world0.currentState)
+      _ <- BSL.writeFile fp stats
+      putStrLn $ "successfully wrote stats to " <> fp
     [velocity, e] -> do
       cfg <- parseConfig velocity e
       let world0 = SO.initialWorld cfg
@@ -104,4 +131,4 @@ main = do
         world0
         (env drawWorld)
         (const (updateWorld' cfg))
-    _ -> putStrLn "usage: ./program hits | ./program <velocity> <exp>"
+    _ -> putStrLn "usage: ./program hits | ./program stats <fp> <velocity> <exp> | ./program <velocity> <exp>"
