@@ -94,6 +94,7 @@ executable physics3-model1
   build-depends:
     , base             ^>=4.17.2.0
     , gloss            ^>=1.13.2.2
+    , bytestring
     , physics3-model1
 
   -- Directories containing source files.
