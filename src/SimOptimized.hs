@@ -2,7 +2,7 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedRecordDot #-}
 
-module SimOptimized (Config (..), World (..), WorldState (..), ObjectState (..), initialWorld, step, countHits) where
+module SimOptimized (Config (..), World (..), WorldState (..), ObjectState (..), initialWorld, step, countHits, getNextState) where
 
 infinity :: Double
 infinity = 1 / 0
@@ -79,8 +79,8 @@ initialWorld cfg = World cur (Just (calcHitBetweenObjects cfg cur)) dt 0
 getNextState :: Config -> WorldState -> Maybe WorldState
 getNextState cfg nt
   | nt.bigObject.velocity >= nt.smallObject.velocity && nt.smallObject.velocity >= 0 = Nothing
-  | nt.smallObject.velocity > 0 = Just $ calcHitBetweenObjects cfg nt
-  | otherwise = Just $ calcHitWithWall nt
+  | nt.smallObject.velocity < 0 = Just $ calcHitWithWall nt
+  | otherwise = Just $ calcHitBetweenObjects cfg nt
 
 step :: Config -> Double -> World -> World
 step cfg dt w
