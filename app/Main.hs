@@ -67,12 +67,12 @@ parseConfig velocity e = do
       putStrLn "error: incorrect params\n\t<velocity> should be in range [0.01; 1]\n\t<exp> should be a positive number and no more than 13"
       exitWith (ExitFailure 1)
 
-printHitsCount :: IO ()
-printHitsCount = forM_ (take 15 getHitsCount) $ \(m, cnt) -> do
+printHitsCount :: Int -> IO ()
+printHitsCount b = forM_ (take 15 getHitsCount) $ \(m, cnt) -> do
   putStrLn $ "M = " <> show m <> "; count = " <> show cnt
   where
     bases :: [Double]
-    bases = map (10.0 ^) [(0 :: Int) ..]
+    bases = map ((int2Double b) ^) [(0 :: Int) ..]
 
     getHitsCount :: [(Double, Integer)]
     getHitsCount = map (\m -> (m, go m)) bases
@@ -111,8 +111,12 @@ getStats cfg = Builder.toLazyByteString . renderTable . go
 main :: IO ()
 main = do
   getArgs >>= \case
-    ["hits"] -> do
-      printHitsCount
+    ["hits"] -> printHitsCount 10
+    ["hits", base] -> do
+      case readMaybe @Int base of
+        Just b -> printHitsCount b
+        Nothing -> do
+          putStrLn "error: invalid base"
     ["stats", fp, velocity, e] -> do
       cfg <- parseConfig velocity e
       let world0 = SO.initialWorld cfg
