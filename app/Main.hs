@@ -67,17 +67,14 @@ parseConfig velocity e = do
       putStrLn "error: incorrect params\n\t<velocity> should be in range [0.01; 1]\n\t<exp> should be a positive number and no more than 13"
       exitWith (ExitFailure 1)
 
-printHitsCount :: Int -> IO ()
-printHitsCount b = forM_ (take 15 getHitsCount) $ \(m, cnt) -> do
-  putStrLn $ "M = " <> show m <> "; count = " <> show cnt
+printHitsCount :: Int -> Int -> IO ()
+printHitsCount b limit = forM_ [0..limit] $ \n -> do
+  let estimation = pi * (int2Double b)**(int2Double n / 2)
+  let cnt = getHitsCount $ (int2Double b)^n
+  putStrLn $ "M = " <> show b <> "^" <> show n <> "; count = " <> show cnt <> "; estimation = " <> show estimation
   where
-    bases :: [Double]
-    bases = map ((int2Double b) ^) [(0 :: Int) ..]
-
-    getHitsCount :: [(Double, Integer)]
-    getHitsCount = map (\m -> (m, go m)) bases
-      where
-        go m =
+    getHitsCount :: Double -> Integer
+    getHitsCount m =
           let cfg =
                 SO.Config
                   { SO.smallMass = 1,
@@ -111,10 +108,10 @@ getStats cfg = Builder.toLazyByteString . renderTable . go
 main :: IO ()
 main = do
   getArgs >>= \case
-    ["hits"] -> printHitsCount 10
-    ["hits", base] -> do
-      case readMaybe @Int base of
-        Just b -> printHitsCount b
+    ["hits"] -> printHitsCount 10 15
+    ["hits", base, limit] -> do
+      case (,) <$> readMaybe @Int base <*> readMaybe @Int limit of
+        Just (b, l) -> printHitsCount b l
         Nothing -> do
           putStrLn "error: invalid base"
     ["stats", fp, velocity, e] -> do
@@ -135,4 +132,4 @@ main = do
         world0
         (env drawWorld)
         (const (updateWorld' cfg))
-    _ -> putStrLn "usage: ./program hits | ./program stats <fp> <velocity> <exp> | ./program <velocity> <exp>"
+    _ -> putStrLn "usage: ./program hits [<base> <limit>] | ./program stats <fp> <velocity> <exp> | ./program <velocity> <exp>"
